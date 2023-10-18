@@ -18,7 +18,7 @@ app = Flask(__name__)
 # def fetch_disk_data():
 #     inp = request.get_json(force=True, silent=True)
 #     filename = inp['db_key']
-#     filepath = os.path.expanduser('~/CodeLess/benchmark/template_functions/video__upload/test.mp4')
+#     filepath = os.path.expanduser('/mydata/CodeLess/benchmark/template_functions/video__upload/test.mp4')
 #     data = None
 #     with open(filepath, 'rb') as f:
 #         data = f.read()
@@ -39,7 +39,7 @@ class MyServer(socketserver.BaseRequestHandler):
         request_info = conn.recv(64 * 1024)
         filename = json.loads(request_info)['db_key']
         filepath = os.path.join(prefetch_dir, filename)
-        # filepath = os.path.expanduser('~/CodeLess/benchmark/template_functions/video__upload/test.mp4')
+        # filepath = os.path.expanduser('/mydata/CodeLess/benchmark/template_functions/video__upload/test.mp4')
         with open(filepath, 'rb') as f:
             conn.sendfile(f)
         conn.close()
@@ -49,7 +49,7 @@ class MyServer(socketserver.BaseRequestHandler):
 #     request_info = client.recv(64 * 1024)
 #     filename = json.loads(request_info)['db_key']
 #     filepath = os.path.join(prefetch_dir, filename)
-#     # filepath = os.path.expanduser('~/CodeLess/benchmark/template_functions/video__upload/test.mp4')
+#     # filepath = os.path.expanduser('/mydata/CodeLess/benchmark/template_functions/video__upload/test.mp4')
 #     with open(filepath, 'rb') as f:
 #         client.sendfile(f)
 #     client.close()

@@ -152,7 +152,7 @@ def clear():
 
 
 if __name__ == '__main__':
-    client = KafkaAdminClient(bootstrap_servers=config.KAFKA_URL)
+    client = KafkaAdminClient(bootstrap_servers=config.KAFKA_URL, api_version=(2,0,2))
     client.delete_topics(client.list_topics())
     server = WSGIServer((sys.argv[1], int(sys.argv[2])), app)
     server.serve_forever()
