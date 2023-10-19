@@ -41,33 +41,10 @@ def run():
     workflow_name = inp['workflow_name']
     request_id = inp['request_id']
     input_datas = inp['input_datas']
+    function_routing = inp['function_routing']
     repo.create_request_doc(request_id)
     requests_info[request_id] = RequestInfo(request_id)
     workflow_info = workflows_info[workflow_name]
-    video_sp_ip_idx = {1: {'video__upload': 0, 'video__split': 0, 'video__simple_process': 0, 'video__transcode': 0,
-                           'video__merge': 0},
-                       2: {'video__upload': 0, 'video__split': 0, 'video__simple_process': 0, 'video__transcode': 1,
-                           'video__merge': 1},
-                       3: {'video__upload': 0, 'video__split': 1, 'video__simple_process': 1, 'video__transcode': 2,
-                           'video__merge': 1}}
-    wordcount_sp_ip_idx = {1: {'wordcount__start': 0, 'wordcount__count': 0, 'wordcount__merge': 0},
-                           2: {'wordcount__start': 0, 'wordcount__count': 1, 'wordcount__merge': 1},
-                           3: {'wordcount__start': 0, 'wordcount__count': 1, 'wordcount__merge': 2}}
-
-    recognizer_sp_ip_idx = {1: {'recognizer__upload': 0, 'recognizer__adult': 0, 'recognizer__violence': 0,
-                                'recognizer__mosaic': 0, 'recognizer__extract': 0, 'recognizer__translate': 0,
-                                'recognizer__censor': 0},
-                            2: {'recognizer__upload': 0, 'recognizer__adult': 1, 'recognizer__violence': 1,
-                                'recognizer__mosaic': 1, 'recognizer__extract': 1, 'recognizer__translate': 1,
-                                'recognizer__censor': 1},
-                            3: {'recognizer__upload': 0, 'recognizer__adult': 1, 'recognizer__violence': 2,
-                                'recognizer__mosaic': 2, 'recognizer__extract': 1, 'recognizer__translate': 0,
-                                'recognizer__censor': 1}
-                            }
-
-    svd_sp_ip_idx = {1: {'svd__start': 0, 'svd__compute': 0, 'svd__merge': 0},
-                     2: {'svd__start': 0, 'svd__compute': 1, 'svd__merge': 0},
-                     3: {'svd__start': 0, 'svd__compute': 1, 'svd__merge': 2}}
     worker_num = len(worker_addrs)
     templates_info = {}
     for i, template_name in enumerate(workflow_info.templates_infos):
@@ -82,12 +59,7 @@ def run():
                     idx = 2
                 ip = worker_addrs[idx]
 
-        if workflow_name == 'wordcount':
-            ip = worker_addrs[wordcount_sp_ip_idx[worker_num][template_name]]
-        if workflow_name == 'recognizer':
-            ip = worker_addrs[recognizer_sp_ip_idx[worker_num][template_name]]
-        if workflow_name == 'svd':
-            ip = worker_addrs[svd_sp_ip_idx[worker_num][template_name]]
+        ip = worker_addrs[function_routing[template_name]]
         # print(template_name, ip)
         templates_info[template_name] = {'ip': ip}
 
@@ -133,6 +105,16 @@ def run():
     ed = time.time()
     return json.dumps({'result': result, 'latency': ed - st})
 
+@app.route('/sent_scaling', methods=['POST'])
+def sent_scaling():
+    inp = request.get_json(force=True, silent=True)
+    scaling_info = inp['scaling_info']
+    for ip in worker_addrs:
+        remote_url = workersp_url.format(ip, 'sent_scaling_data')
+        data = {'scaling_info': scaling_info}
+        r = requests.post(remote_url, json=request_info)
+        assert r.status_code == 200
+    return 'OK', 200
 
 @app.route('/post_user_data', methods=['POST'])
 def post_user_data():

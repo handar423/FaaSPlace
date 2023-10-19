@@ -43,7 +43,7 @@ def post_request(request_id, workflow_name):
 
 def end_loop(idx, workflow_name, parallel, duration):
     while time.time() - test_start < pre_time + duration:
-        post_request('request_' + str(idx).rjust(4, '0'), workflow_name)
+        post_request('request_' + str(idx).rjust(8, '0'), workflow_name)
         idx += parallel
 
 
@@ -145,7 +145,7 @@ def finish_worker(addr):
 def file_rpm(workflow_name, rpm, duration):
     idx = 0
     while time.time() - test_start < pre_time + duration:
-        gevent.spawn(post_request, f'{workflow_name}_request_' + str(idx).rjust(4, '0'), workflow_name)
+        gevent.spawn(post_request, f'{workflow_name}_request_' + str(idx).rjust(8, '0'), workflow_name)
         idx += 1
         delta = time.time() - test_start
         period = int(delta / 20)

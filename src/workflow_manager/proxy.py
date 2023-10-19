@@ -67,7 +67,11 @@ def socket_server():
         dispatcher.receive_incoming_data(data['request_id'], data['workflow_name'], data['template_name'],
                                          data['block_name'], data['datas'], from_local=True)
 
-
+@app.route('/sent_scaling_data', methods=['POST'])
+def handle_scaling_data():
+    data = request.get_json(force=True, silent=True)
+    dispatcher.manager.scaling_info = data['scaling_info']
+    return 'OK', 200
 
 @app.route('/commit_inter_data', methods=['POST'])
 def handle_inter_data_commit():

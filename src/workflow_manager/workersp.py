@@ -80,6 +80,7 @@ class WorkerSPManager:
         self.incoming_data_queue: List[DataInfo] = []
         self.lock = gevent.lock.BoundedSemaphore()
         self.kafka_client = pykafka.KafkaClient(hosts=config.KAFKA_URL, use_greenlets=True)
+        self.scaling_info = None
         gevent.spawn_later(dispatch_interval, self.dispatch_incoming_data)
         # min_port += 5000
 

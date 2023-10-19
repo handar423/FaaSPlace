@@ -43,7 +43,7 @@ def post_request(request_id, workflow_name):
 
 def end_loop(idx, workflow_name, parallel, duration):
     while time.time() - test_start < pre_time + duration:
-        post_request('request_' + str(idx).rjust(4, '0'), workflow_name)
+        post_request('request_' + str(idx).rjust(8, '0'), workflow_name)
         idx += parallel
 
 

@@ -45,7 +45,7 @@ def post_request(request_id, idx):
 
 def end_loop(idx):
     while time.time() - test_start < maximal_time:
-        post_request('request_' + str(idx).rjust(4, '0'), idx)
+        post_request('request_' + str(idx).rjust(8, '0'), idx)
         idx += parallel
 
 

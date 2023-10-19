@@ -78,8 +78,8 @@ functions:
   next:
     type: pass
     nodes:
-      - virtual1
-- name: virtual1
+      - virtual_1
+- name: virtual_1
   source: VIRTUAL
   runtime: 1
   next:

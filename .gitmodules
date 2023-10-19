@@ -1,0 +1,4 @@
+[submodule "test/simulator_scheduler"]
+	path = test/simulator_scheduler
+	url = https://github.com/handar423/serverless_scheduler.git
+	branch = real
