@@ -8,6 +8,7 @@ import socket
 import time
 import json
 import sys
+import math
 
 sys.path.append('../../')
 from gevent.pywsgi import WSGIServer
@@ -37,8 +38,8 @@ class Dispatcher:
         self.manager.receive_incoming_data(request_id, workflow_name, template_name, block_name, datas, from_local,
                                            from_virtual)
 
-    def receive_incoming_request(self, request_id, workflow_name, templates_info):
-        self.manager.init_incoming_request(request_id, workflow_name, templates_info)
+    def receive_incoming_request(self, request_id, workflow_name, templates_info, scaling_index):
+        self.manager.init_incoming_request(request_id, workflow_name, templates_info, scaling_index)
 
 
 print(config.WORKFLOWS_INFO_PATH)
@@ -47,6 +48,7 @@ dispatcher = Dispatcher(config.WORKFLOWS_INFO_PATH, config.FUNCTIONS_INFO_PATH)
 
 gc_interval = 20
 
+host_ip = socket.gethostbyname(socket.gethostname())
 
 def regular_clear_gc():
     gevent.spawn_later(gc_interval, regular_clear_gc)
@@ -62,7 +64,6 @@ def socket_server():
         c, addr = s.accept()
         client_data = c.recv(64 * 1024)
         c.close()
-        # time.sleep(0.005)
         data = json.loads(client_data)
         dispatcher.receive_incoming_data(data['request_id'], data['workflow_name'], data['template_name'],
                                          data['block_name'], data['datas'], from_local=True)
@@ -71,6 +72,28 @@ def socket_server():
 def handle_scaling_data():
     data = request.get_json(force=True, silent=True)
     dispatcher.manager.scaling_info = data['scaling_info']
+    return 'OK', 200
+
+@app.route('/sent_detail_time', methods=['POST'])
+def handle_cold_start_data():
+    data = request.get_json(force=True, silent=True)
+    dispatcher.manager.function_manager.cold_start_time = data['cold_start_time']
+    dispatcher.manager.function_manager.memory_map = data['memory_map']
+    dispatcher.manager.function_manager.worker_size = data['worker_size']
+    dispatcher.manager.function_manager.worker_idle_size = data['worker_size']
+    return 'OK', 200
+
+@app.route('/init_container', methods=['POST'])
+def handle_init_container():
+    for template_name in dispatcher.manager.cold_start_time:
+        target_scaling_time = max([in_scaling_info[template_name] for in_scaling_info in 
+                                   dispatcher.manager.scaling_info])
+        target_container_number = math.ceil(target_scaling_time / \
+            dispatcher.manager.function_manager.templates[template_name].parallel_limit)
+        for i in range(target_container_number):
+            dispatcher.manager.function_manager.templates[template_name].create_container(template_name)
+        assert len(dispatcher.manager.function_manager.templates[template_name].idle_containers) == target_container_number, \
+            "init_container failed %s" % template_name
     return 'OK', 200
 
 @app.route('/commit_inter_data', methods=['POST'])
@@ -107,7 +130,8 @@ def req():
     request_id = data['request_id']
     workflow_name = data['workflow_name']
     templates_info = data['templates_info']
-    dispatcher.receive_incoming_request(request_id, workflow_name, templates_info)
+    scaling_index = data['scaling_index']
+    dispatcher.receive_incoming_request(request_id, workflow_name, templates_info, scaling_index)
     return json.dumps({'status': 'ok'})
 
 

@@ -17,9 +17,16 @@ class FunctionManager:
         self.client = docker.from_env()
         self.templates: Dict[str, Template] = {
             template_info.template_name: Template(self.client, template_info, self.port_manager,
-                                                  len(template_info.blocks), template_info.cpus)
+                                                  len(template_info.blocks), template_info.cpus, self)
             for template_info in self.templates_info
         }
+        # wait for sent_detail time
+        self.scaling_info = None
+        self.cold_start_map = None
+        self.memory_map = None
+        self.worker_size = None
+        self.worker_idle_size = None
+        self.scaling_index = -1
         self.init()
 
     def init(self):
@@ -45,10 +52,15 @@ class FunctionManager:
         self.templates[function_name].send_data(request_id, workflow_name, function_name, datas, datatype)
 
     def allocate_block(self, request_id, workflow_name, template_name, templates_infos, block_name, block_inputs: dict,
-                       block_infos):
+                       block_infos, scaling_index):
         assert template_name in self.templates
+        # update scaling info
+        if scaling_index > self.scaling_index:
+            self.scaling_index = scaling_index
+            for templates in self.templates.values():
+                templates.target_container_number = self.scaling_info[scaling_index][templates.template_name]
         self.templates[template_name].allocate_block(request_id, workflow_name, template_name, templates_infos,
-                                                     block_name, block_inputs, block_infos)
+                                                     block_name, block_inputs, block_infos, scaling_index)
 
     def preempt_block(self, request_id, workflow_name, template_name, buddy_block_name, block_name, block_inputs,
                       block_infos):

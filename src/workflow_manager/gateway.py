@@ -42,6 +42,7 @@ def run():
     request_id = inp['request_id']
     input_datas = inp['input_datas']
     function_routing = inp['function_routing']
+    scaling_index = inp['scaling_index']
     repo.create_request_doc(request_id)
     requests_info[request_id] = RequestInfo(request_id)
     workflow_info = workflows_info[workflow_name]
@@ -68,7 +69,8 @@ def run():
     # print(templates_info)
     data = {'request_id': request_id,
             'workflow_name': workflow_name,
-            'templates_info': templates_info}
+            'templates_info': templates_info,
+            'scaling_index': scaling_index}
     ips = set()
     for template_info in templates_info.values():
         ips.add(template_info['ip'])
@@ -98,12 +100,24 @@ def run():
                 'workflow_name': workflow_name,
                 'template_name': 'global_inputs',
                 'block_name': 'global_inputs',
-                'datas': ips_datas_mapping[ip]}
+                'datas': ips_datas_mapping[ip],
+                'post_time': time.time()}
         events.append(gevent.spawn(requests.post, remote_url, json=data))
     gevent.joinall(events)
     result = requests_info[request_id].result.get()
     ed = time.time()
     return json.dumps({'result': result, 'latency': ed - st})
+
+@app.route('/sent_detail_time', methods=['POST'])
+def sent_cold_start():
+    inp = request.get_json(force=True, silent=True)
+    data = {'cold_start_map': inp['cold_start_map'], 
+            'memory_map': inp['memory_map']}
+    for index, ip in enumerate(worker_addrs):
+        remote_url = workersp_url.format(ip, 'sent_detail_time')
+        r = requests.post(remote_url, json={**data, **{'worker_size': inp['worker_size'][index]}})
+        assert r.status_code == 200
+    return 'OK', 200
 
 @app.route('/sent_scaling', methods=['POST'])
 def sent_scaling():
@@ -112,7 +126,15 @@ def sent_scaling():
     for ip in worker_addrs:
         remote_url = workersp_url.format(ip, 'sent_scaling_data')
         data = {'scaling_info': scaling_info}
-        r = requests.post(remote_url, json=request_info)
+        r = requests.post(remote_url, json=data)
+        assert r.status_code == 200
+    return 'OK', 200
+
+@app.route('/init_container', methods=['POST'])
+def init_container():
+    for ip in worker_addrs:
+        remote_url = workersp_url.format(ip, 'init_container')
+        r = requests.post(remote_url)
         assert r.status_code == 200
     return 'OK', 200
 

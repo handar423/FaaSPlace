@@ -9,6 +9,7 @@ import couchdb
 import redis
 import requests
 import container_config
+from typing import Tuple, Dict
 
 host_url = 'http://172.17.0.1:8000/{}'
 disk_reader_url = 'http://172.17.0.1:8001/{}'
@@ -49,6 +50,7 @@ class Store:
                 self.block_serial = v['serial_num']
         self.posting_threads = []
         self.outputs_serial = {}
+        self.intermediate_date_record:Dict[Tuple[str, str], float] = {}
 
     def fetch_scalability_config(self):
         try:
@@ -79,7 +81,8 @@ class Store:
         # Todo: potential problem: if couchdb is too slow, then the expired redis data will be uploaded to couchdb while
         #  this store is uploading to couchdb
         st = time.time()
-        ips_cnt, local_cnt, remote_cnt, final_cnt = self.get_destination_locality(key)
+        ips_cnt, local_cnt, remote_cnt, final_cnt, local_ip, target_ip = \
+            self.get_destination_locality(key)
         ed = time.time()
         # print('get_destination info', ed - st, file=sys.stderr)
         db_key = self.generate_db_key(key, serial_num)
@@ -128,6 +131,11 @@ class Store:
                                   'output_type': self.block_infos['output_datas'][key]['type'],
                                   'ips_cnt': ips_cnt,
                                   'post_time': time.time()})
+            assert target_ip != None, 'cannot find target_ip'
+            if (local_ip, target_ip) not in self.intermediate_date_record:
+                self.intermediate_date_record[(local_ip, target_ip)] = len(val)
+            else:
+                self.intermediate_date_record[(local_ip, target_ip)] += len(val)
             self.bypass_size += len(val)
 
     def put_to_redis(self, key, db_key, val, datatype, serial_num, local_cnt, remote_cnt):
@@ -282,6 +290,7 @@ class Store:
         elif self.block_infos['type'] == 'NORMAL':
             dest = self.block_infos['output_datas'][key]['dest']
         local_ip = self.templates_infos[self.template_name]['ip']
+        target_ip = None
         for dest_template_name, dest_template_infos in dest.items():
             if dest_template_name == '$USER':
                 final_cnt += 1
@@ -294,7 +303,7 @@ class Store:
             if target_ip not in ips_cnt:
                 ips_cnt[target_ip] = 0
             ips_cnt[target_ip] += len(dest_template_infos)
-        return ips_cnt, local_cnt, remote_cnt, final_cnt
+        return ips_cnt, local_cnt, remote_cnt, final_cnt, local_ip, target_ip
 
     def post(self, key, val, force=False, datatype='json', debug=False):
         if debug:

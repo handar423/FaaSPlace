@@ -45,7 +45,6 @@ class Runner:
         self.code = None
         self.ctx = None
         self.input_srcs = None
-        self.idle_blocks = []
         self.cur_running = set()
         os.chdir(work_dir)
         # self.db = couchdb.Server('http://openwhisk:openwhisk@172.17.0.1:5984')['results']
@@ -53,7 +52,6 @@ class Runner:
         for idx in range(parallel_limit):
             block_name = 'block_' + str(idx)
             os.mkdir(block_name)
-            self.idle_blocks.append(block_name)
 
     def run_block(self, request_id, workflow_name, template_name, templates_infos, block_name, block_inputs: dict,
                   block_infos, chunk_size):

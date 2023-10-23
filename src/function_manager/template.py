@@ -25,13 +25,14 @@ class RequestInfo:
         self.block_infos = block_infos
         # self.result = event.AsyncResult()
         self.arrival_time = time.time()
-
+        self.cold_start_time = 0
+        self.queuing_time = 0
 
 idle_lifetime = 600
 
-
 class Template:
-    def __init__(self, client, template_info: TemplateInfo, port_manager: PortManager, parallel_limit, cpus):
+    def __init__(self, client, template_info: TemplateInfo, port_manager: 
+                 PortManager, parallel_limit, cpus, function_manager):
         self.client = client
         self.template_info = template_info
         self.port_manager = port_manager
@@ -47,12 +48,15 @@ class Template:
         # lock may be useless!
         self.lock = BoundedSemaphore()
         self.num_exec = 0
-        self.idle_blocks: Dict[str, List[Container]] = {block_name: [] for block_name in
-                                                        self.template_info.blocks.keys()}
         self.idle_containers: List[Container] = []
         # Todo: this need GC.
         self.requestID_block_container = {}
         self.requestIDs_container: Dict[str, Container] = {}
+        self.function_manager = function_manager
+        self.target_container_number = 0
+        # 等于正在运行的和warm的和
+        self.warm_container_number = 0
+        self.working_container_number = 0
 
     def upd(self, request_id, block_name, container: Container):
         if request_id not in self.requestID_block_container:
@@ -93,16 +97,17 @@ class Template:
 
     def get_idle_container(self, block_name=None):
         assert block_name is not None
-        res = None
         # self.lock.acquire()
-        if len(self.idle_containers) > 0:
-            res = self.idle_containers[-1]
-            res.idle_blocks_cnt -= 1
-            assert res.idle_blocks_cnt >= 0
-            if res.idle_blocks_cnt == 0:
-                self.idle_containers.pop()
-        # self.lock.release()
-        return res
+        for i in range(len(self.idle_containers)):
+            if self.idle_containers[i].idle_blocks_cnt > 0:
+                res = self.idle_containers[i]
+                self.idle_containers[i].idle_blocks_cnt -= 1
+                assert self.idle_containers[i].idle_blocks_cnt >= 0
+                if self.idle_containers[i].idle_blocks_cnt == 0:
+                    self.idle_containers.pop(i)
+                return res
+        else:
+            return None
 
     def put_idle_container(self, container):
         # self.lock.acquire()
@@ -113,28 +118,31 @@ class Template:
     def run_block(self, container: Container, request: RequestInfo):
         # self.upd(request.request_id, request.block_name, container)
         st = time.time()
-        delay_time = container.run_block(request.request_id, request.workflow_name, request.template_name,
-                                         request.templates_infos, request.block_name, request.block_inputs,
-                                         request.block_infos)
+        transfer_time, inter_data_record = container.run_block(request.request_id, request.workflow_name, request.template_name,
+                request.templates_infos, request.block_name, request.block_inputs, request.block_infos)
         ed = time.time()
-        # print(request.request_id, request.template_name, delay_time)
+        # print(request.request_id, request.template_name, transfer_time)
         if self.template_info.gc == 'True' or self.template_info.gc == True:
             container.run_gc()
-        if delay_time < 0.005 or config.DISABLE_PRESSURE_AWARE:
-            self.put_container(container)
-        else:
-            gevent.spawn_later(delay_time, self.put_container, container)
+        wait_time = transfer_time + request.cold_start_time
+        gevent.spawn_later(wait_time, self.put_container, container)
         repo.save_latency(
             {'request_id': request.request_id, 'template_name': request.template_name, 'block_name': request.block_name,
              'phase': 'use_container', 'time': ed - st, 'st': st, 'ed': ed, 'cpu': self.cpus})
+        repo.save_latency(
+            {'request_id': request.request_id, 'template_name': request.template_name,
+             'phase': 'detail_time_flag', 'timestamp': time.time(), 'duration_time': ed - st,
+             'cold_start_time' : request.cold_start_time, 'data_time': transfer_time, 
+             'queuing_time': request.queuing_time, 'arrive_time': request.arrival_time, 
+             'st': st, 'ed': ed, 'intermediate_data_record': inter_data_record})
 
     def send_data(self, request_id, workflow_name, function_name, datas, datatype):
         self.requestIDs_container[request_id].send_data(request_id, workflow_name, function_name, datas, datatype)
 
     def allocate_block(self, request_id, workflow_name, template_name, templates_infos, block_name, block_inputs,
-                       block_infos):
+                       block_infos, scaling_index):
         request = RequestInfo(request_id, workflow_name, template_name, templates_infos, block_name, block_inputs,
-                              block_infos)
+                              block_infos, scaling_index)
         self.request_queue.append(request)
 
     def preempt_block(self, request_id, workflow_name, template_name, buddy_block_name, block_name, block_inputs,
@@ -184,29 +192,42 @@ class Template:
         assert container.idle_blocks_cnt > 0
         if container.idle_blocks_cnt == 1:
             self.idle_containers.append(container)
+        self.working_container_number -= 1
+        if self.warm_container_number > self.target_container_number:
+            self.warm_container_number -= 1
+            self.function_manager.worker_idle_size += self.function_manager.memory_map[self.template_info.template_name]
 
     def dispatch_request(self):
+        if self.warm_container_number > self.target_container_number and self.warm_container_number < self.working_container_number:
+            delete_number = self.warm_container_number - max(self.target_container_number, self.working_container_number)
+            self.warm_container_number -= delete_number
+            self.function_manager.worker_idle_size += delete_number * self.function_manager.memory_map[self.template_info.template_name]
         # if self.num_processing >= len(self.request_queue):
         #     return
-        if len(self.request_queue) == 0:
+        if len(self.request_queue) == 0 or self.working_container_number >= self.target_container_number:
             return
         request = self.request_queue.pop(0)
         # print('Allocating a block...')
 
+        if self.warm_container_number > self.working_container_number:
+            self.working_container_number += 1
+        elif self.function_manager.worker_idle_size >= self.function_manager.memory_map[self.template_info.template_name]:
+            self.function_manager.worker_idle_size -= self.function_manager.memory_map[self.template_info.template_name]
+            self.warm_container_number += 1
+            self.working_container_number += 1
+            request.cold_start_time = self.function_manager.cold_start_map[self.template_info.template_name]
+        else:
+            print("not enough memory for function %s, waiting ..." % self.template_info.template_name)
+            self.request_queue.append(request)
+            return
+
         container = self.get_idle_container(request.block_name)
 
         if container is None:
-            container = self.create_container(request.block_name)
-        else:
-            pass
-            # print(request.block_name, request.template_name, request.request_id, 'is using idle block')
-
-        if container is None:
-            print('dispatch_failed in template.py')
-            self.request_queue.append(request)
-            return
+            assert False, "cannot find container for %s" % self.template_info.template_name
         # self.num_processing -= 1
 
+        request.queuing_time = time.time() - request.arrival_time
         self.run_block(container, request)
         # self.lock.acquire()
         # container.idle_blocks_cnt += 1

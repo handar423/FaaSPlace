@@ -70,8 +70,9 @@ class Block:
         shutil.rmtree(work_dir)
         ed = time.time()
         exec_time = ed - st
-        transfer_time = store.bypass_size / (0.8 * 50 * 1024 * 1024 * self.cpu)
-        return max(0, transfer_time - exec_time)
+        # 已经按照数据传输时间修改了
+        transfer_time = store.bypass_size / (25 * 1024 * 1024)
+        return transfer_time, store.intermediate_date_record
         # st = time.time()
         # gc.collect()
         # ed = time.time()

@@ -80,15 +80,14 @@ class WorkerSPManager:
         self.incoming_data_queue: List[DataInfo] = []
         self.lock = gevent.lock.BoundedSemaphore()
         self.kafka_client = pykafka.KafkaClient(hosts=config.KAFKA_URL, use_greenlets=True)
-        self.scaling_info = None
         gevent.spawn_later(dispatch_interval, self.dispatch_incoming_data)
         # min_port += 5000
 
-    def init_incoming_request(self, request_id, workflow_name, templates_info: Dict[str, dict]):
+    def init_incoming_request(self, request_id, workflow_name, templates_info: Dict[str, dict], scaling_index):
         ips = set()
         for template_info in templates_info.values():
             ips.add(template_info['ip'])
-        self.requests_info[request_id] = RequestInfo(workflow_name, ips, templates_info)
+        self.requests_info[request_id] = RequestInfo(workflow_name, ips, templates_info, scaling_index)
         self.workflows_state[request_id] = WorkflowState(request_id, self.workflows_info[workflow_name].data)
         self.flow_monitor.requests_keys_info[request_id] = {}
 
@@ -533,7 +532,7 @@ class WorkerSPManager:
         self.function_manager.allocate_block(request_id, workflow_name, template_name,
                                              self.requests_info[request_id].templates_infos, block_name, input_datas,
                                              self.workflows_info[workflow_name].templates_infos[template_name][
-                                                 'blocks'][block_name])
+                                                 'blocks'][block_name], self.requests_info[request_id].scaling_index)
 
     def send_data_remote(self, remote_addr, request_id, workflow_name, template_name, block_name, datas, from_virtual):
         remote_url = 'http://{}:8000/transfer_data'.format(remote_addr)
@@ -542,7 +541,8 @@ class WorkerSPManager:
                 'template_name': template_name,
                 'block_name': block_name,
                 'datas': datas,
-                'from_virtual': from_virtual}
+                'from_virtual': from_virtual,
+                'post_time': time.time()}
         requests.post(remote_url, json=data)
 
     # def check_runnable(self, state: WorkflowState, workflow_name, function_name):
