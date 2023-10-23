@@ -49,17 +49,6 @@ def run():
     worker_num = len(worker_addrs)
     templates_info = {}
     for i, template_name in enumerate(workflow_info.templates_infos):
-        ip = worker_addrs[i % worker_num]
-        if workflow_name == 'video':
-            ip = worker_addrs[video_sp_ip_idx[worker_num][template_name]]
-            if template_name == 'video__transcode' and worker_num == 3:
-                flag = int(request_id[-1]) % 2
-                if flag == 0:
-                    idx = 0
-                else:
-                    idx = 2
-                ip = worker_addrs[idx]
-
         ip = worker_addrs[function_routing[template_name]]
         # print(template_name, ip)
         templates_info[template_name] = {'ip': ip}

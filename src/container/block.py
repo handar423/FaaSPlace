@@ -6,6 +6,7 @@ import threading
 import time
 import couchdb
 import os
+import random
 
 import redis as redis
 
@@ -64,7 +65,8 @@ class Block:
                 parallel_cnt = store.outputs_serial[k] + 1
                 break
         if foreach_start:
-            store.post('VIRTUAL.CNT', parallel_cnt)
+            # store.post('VIRTUAL.CNT', parallel_cnt)
+            store.post('VIRTUAL.CNT', random.randint(3, 6))
         for t in store.posting_threads:
             t.join()
         shutil.rmtree(work_dir)
