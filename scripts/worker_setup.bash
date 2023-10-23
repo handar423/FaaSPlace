@@ -15,5 +15,6 @@ apt-get install -y docker-ce docker-ce-cli containerd.io python3-pip
 sudo -H pip3 install -r /mydata/FaaSPlace/scripts/requirements.txt
 # install redis
 docker pull redis
+sudo docker kill redis
 docker run -itd -p 6379:6379 --name redis redis
 bash image_setup.bash
