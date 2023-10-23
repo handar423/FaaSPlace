@@ -12,7 +12,7 @@ echo \
 apt-get update
 apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose python3-pip
 apt-get install wondershaper
-sudo -H pip3 install -r /mydata/FaaSFlow/scripts/requirements.txt
+sudo -H pip3 install -r /mydata/FaaSPlace/scripts/requirements.txt
 # install and initialize couchdb
 docker pull couchdb
 sudo docker kill couchdb
